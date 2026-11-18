@@ -53,7 +53,7 @@ def main():
 
     if len(order) % 2 == 0 and len(order) >= 2:
         half = len(order) // 2
-        print("\npairs (second over first, same positions):")
+        print("\npairs (first arm of the position over the second, same positions):")
         print(f"{'pair':<5} {'chat':>7} {'agent':>7} {'prompt':>7}")
         for k in range(half):
             a1, b1 = rows[k], rows[k + half]

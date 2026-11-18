@@ -79,6 +79,7 @@ in the two pairs. Chat and agent are medians of the design above.
 | arena `auto` vs default | fork,auto,auto,fork | 1.022 / 1.020 | 0.996 / 0.965 | **not a valid test**: mbind ran after `cudaHostRegister` had already faulted the arena in, so all four arms were first-touch placement (see the arena section). With the hook, `auto` binds node 0 - where the default already puts the arena |
 | arena `interleave` vs default | diag arms | pages 30.56 GiB N0 / 1.08 GiB N1 after the load | - | **no gain possible**: the default already puts the arena on the GPU's node, and automatic NUMA balancing keeps it there |
 | fork engine vs installed | installed,fork,fork,installed | 1.066 / 1.001 | 0.999 / 0.996 | **no difference**: the installed engine's own two arms differ by 7 % in chat (arm 1 started at 52 C, the others at 66 C); both second-position arms are ~0.3-0.4 % slower, a position effect, not an engine one |
+| MTP vs DFlash2 drafter (Q2_0) | mtp,dflash2,dflash2,mtp | 0.893 / 1.146 | 1.036 / 1.031 | **DFlash2 for chat (13.3 %), agent a wash**: both pairs put DFlash2 above MTP in chat, the agent pairs disagree in sign; prompt equal |
 
 PLE chat medians, in run order: 41.4 / 40.85 / 41.65 / 41.3 tok/s (mmap / ram / ram / mmap). The two ram arms and the
 two mmap arms bracket each other; the ratio is below the drift of two identical arms.
@@ -86,6 +87,16 @@ two mmap arms bracket each other; the ratio is below the drift of two identical 
 Fork-vs-installed medians, in run order: chat 41.85 / 39.15 / 39.25 / 39.1 tok/s, agent 37.56 / 37.34 / 37.61 / 37.48
 tok/s, prompt 385.3 / 385.8 / 385.1 / 384.4 tok/s. The fork is the 2nd and 3rd; the installed engine is the 1st and
 4th. The installed engine's 41.85 in arm 1 is the outlier of the block, and it is the arm that ran 14 C cooler.
+
+MTP-vs-DFlash2 medians, in run order: chat 33.65 / 39.25 / 37.70 / 34.25 tok/s, agent 39.02 / 35.58 / 37.65 /
+34.52 tok/s, prompt 385.7 / 382.85 / 382.15 / 384.0 tok/s. Each arm ran the app's own default for that drafter: MTP
+`--spec 4` (with `--lookup-max-t 12`, windows up to 4 tokens, no DFlash2), DFlash2 `--draft dflash2 --draft-conf 0.7
+--spec 6` (no MTP layer). Geometric mean of each drafter's two arms: chat 33.95 against 38.47 tok/s (**+13.3 % for
+DFlash2**), agent 36.70 against 36.60 (-0.3 %), prompt 384.85 against 382.50 (-0.6 %). The chat gap is draft acceptance
+over the ten identical requests: DFlash2 29 of 49 and 28 of 47 (59 %), MTP 61 of 193 and 54 of 180 (30-32 %). Arm 1 (MTP)
+started at 56 C while arms 2-4 were cooled to 65-66 C, so the thermal bias ran against the winner. Cost: the MTP layer is
+837 MiB of VRAM plus a 178.4 MiB head, the DFlash2 drafter 690 MiB plus 104.2 MiB, which leaves 13,311 expert-cache
+slots with MTP against 13,415 with DFlash2.
 
 Decision: production keeps the installed engine (`engine-cuda12/strata`, the MMQ build) and the fork stays a
 measurement tree. The fork's sm_61 table is also a no-op for this owner, whose `strata-q2_0.json` sets the same seven
@@ -247,3 +258,6 @@ Done in this window: the decoder-only probe (item 1 of the old list), the fork's
    "locked is faster", not "resident is faster". The `mmap` result already frees 26.8 GiB; a locked `ram` arm would
    trade that memory back for an unmeasured gain, and the box has 820 MB in swap, so it needs a measured win to be
    worth it.
+6. **The same drafter A/B on IQ2_XS and IQ3_XXS**: the +13.3 % chat / wash agent above is Q2_0 with the per-pack
+   profile. The other two packs have their own default `--spec` and their own acceptance, so the result does not carry
+   over untested.
